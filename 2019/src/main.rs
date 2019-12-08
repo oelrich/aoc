@@ -1,3 +1,3 @@
 fn main() {
-  println!("{}", day07::b::run());
+  println!("{}", day08::a::run());
 }
