@@ -1,107 +1,124 @@
 use std::collections::HashMap;
 mod error;
-pub mod input;
-use error::Error;
-enum OpCode {
-  Add = 1,
-  Multiply = 2,
-  Read = 3,
-  Write = 4,
-  JumpIfTrue = 5,
-  JumpIfFalse = 6,
-  LessThan = 7,
-  Equals = 8,
-  Halt = 99,
-}
-impl OpCode {
-  fn get_op(val: i64) -> Result<OpCode, Error> {
-    match val {
-      1 => Ok(OpCode::Add),
-      2 => Ok(OpCode::Multiply),
-      3 => Ok(OpCode::Read),
-      4 => Ok(OpCode::Write),
-      5 => Ok(OpCode::JumpIfTrue),
-      6 => Ok(OpCode::JumpIfFalse),
-      7 => Ok(OpCode::LessThan),
-      8 => Ok(OpCode::Equals),
-      99 => Ok(OpCode::Halt),
-      _ => Err(Error::Operand(val)),
-    }
-  }
-}
-enum Mode {
-  Direct,
-  Stored,
-}
-impl Mode {
-  fn dest_of_val(val: i64) -> Result<Mode, Error> {
-    match val {
-      0 => Ok(Mode::Direct),
-      1 => Ok(Mode::Stored),
-      _ => Err(Error::Mode),
-    }
-  }
-  fn src_of_val(val: i64) -> Result<Mode, Error> {
-    match val {
-      0 => Ok(Mode::Stored),
-      1 => Ok(Mode::Direct),
-      _ => Err(Error::Mode),
-    }
-  }
-}
-enum Value {
-  Direct(i64),
-  Stored(i64),
-}
-impl std::fmt::Display for Value {
-  fn fmt(&self, fmt: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
-    match self {
-      Value::Direct(val) => write!(fmt, "Direct({})", val),
-      Value::Stored(addr) => write!(fmt, "Stored({})", addr),
-    }
-  }
-}
-enum Instruction {
-  Add((Value, Value, Value)),
-  Multiply((Value, Value, Value)),
-  JumpIfTrue((Value, Value)),
-  JumpIfFalse((Value, Value)),
-  LessThan((Value, Value, Value)),
-  Equals((Value, Value, Value)),
-  Input(Value),
-  Output(Value),
-  Halt,
-}
+pub mod helpers;
 
-impl Instruction {
-  fn get_op_modes(op: i64) -> Result<(OpCode, Mode, Mode, Mode), Error> {
-    let op_val = op % 100;
-    let mode0 = (op % 1000) / 100;
-    let mode1 = (op % 10000) / 1000;
-    let mode2 = (op % 100_000) / 10_000;
-    Ok((
-      OpCode::get_op(op_val)?,
-      Mode::src_of_val(mode0)?,
-      Mode::src_of_val(mode1)?,
-      Mode::dest_of_val(mode2)?,
-    ))
+pub mod input;
+use error::*;
+use helpers::*;
+
+pub fn run_to_end(computer: &mut Computer, input: &[i64]) -> Vec<i64> {
+  let mut input: Vec<i64> = input.iter().cloned().rev().collect();
+  let mut output = Vec::new();
+  loop {
+    match computer.run() {
+      State::Crashed => break,
+      State::Halted => break,
+      State::Ready => (),
+      State::Running => (),
+      State::Output(_id, value) => output.push(value),
+      State::Input => {
+        if !computer.input_value(input.pop().expect("Asked for more input than provided.")) {
+          panic!("Asked for but refused input")
+        }
+      }
+    }
   }
+  output
 }
 
 #[derive(Debug, Clone)]
 pub struct Computer {
-  input: Vec<i64>,
-  output: Vec<i64>,
+  id: usize,
+  error: Option<Error>,
+  input: Option<Value>,
   memory: HashMap<i64, i64>,
+  state: State,
   pc: i64,
 }
-enum State {
-  Output,
-  Input,
-  Running,
-  Halted,
-  Crash,
+
+impl Computer {
+  pub fn load(id: usize, code: &[i64]) -> Computer {
+    let value_pairs = code
+      .iter()
+      .enumerate()
+      .map(|(idx, val)| (idx as i64, *val))
+      .collect::<HashMap<i64, i64>>();
+    Computer {
+      id,
+      error: None,
+      state: State::Ready,
+      input: None,
+      memory: value_pairs,
+      pc: 0,
+    }
+  }
+  pub fn step(&mut self) -> State {
+    let mode_op = self.get_mode_op();
+    match mode_op {
+      Ok(instruction) => self.execute_instruction(instruction),
+      Err(err) => {
+        self.error = Some(err);
+        State::Crashed
+      }
+    }
+  }
+
+  pub fn run(&mut self) -> State {
+    if self.state == State::Input {
+      return State::Input;
+    }
+    loop {
+      match self.step() {
+        State::Running => (),
+        State::Ready => (),
+        state => return state,
+      }
+    }
+  }
+
+  pub fn input_value(&mut self, value: i64) -> bool {
+    if let Some(dest) = self.input.clone() {
+      match self.write_value(dest, value) {
+        Ok(state) => self.state = state,
+        Err(error) => {
+          self.error = Some(error);
+        }
+      }
+      self.input = None;
+      return true;
+    }
+    false
+  }
+  pub fn error(&self) -> String {
+    match self.error.clone() {
+      Some(error) => format!("Error: {}", error),
+      None => "I'm fully operational, and all my circuits are functioning perfectly.".to_owned(),
+    }
+  }
+  pub fn crashed(&self) -> bool {
+    match self.state {
+      State::Crashed => true,
+      _ => false,
+    }
+  }
+  pub fn halted(&self) -> bool {
+    match self.state {
+      State::Halted => true,
+      _ => false,
+    }
+  }
+  pub fn want_input(&self) -> Option<usize> {
+    self.input.clone().map(|_| self.id)
+  }
+
+  pub fn read_memory(&self, addr: i64) -> Option<i64> {
+    self.memory.get(&addr).cloned()
+  }
+  pub fn edit_memory(&mut self, addr: i64, value: i64) {
+    self.memory.insert(addr, value);
+  }
 }
+
 impl Computer {
   fn set(&mut self, addr: i64, value: i64) {
     self.memory.insert(addr, value);
@@ -109,23 +126,16 @@ impl Computer {
   pub fn get(self, addr: i64) -> i64 {
     *self.memory.get(&addr).expect("msg: &str")
   }
-  pub fn load(code: &[i64]) -> Computer {
-    let value_pairs = code
-      .iter()
-      .enumerate()
-      .map(|(idx, val)| (idx as i64, *val))
-      .collect::<HashMap<i64, i64>>();
-    Computer {
-      input: Vec::new(),
-      output: Vec::new(),
-      memory: value_pairs,
-      pc: 0,
-    }
-  }
   fn read(&self, address: i64) -> Result<i64, Error> {
     match self.memory.get(&address) {
       Some(value) => Ok(*value),
       None => Err(Error::Address(address)),
+    }
+  }
+  fn read_value(&mut self, source: Value) -> Result<i64, Error> {
+    match source {
+      Value::Direct(val) => Ok(val),
+      Value::Stored(addr) => self.read(addr),
     }
   }
   fn get_mode(&mut self, mode: Mode) -> Result<Value, Error> {
@@ -224,30 +234,9 @@ impl Computer {
     }
     Ok(State::Running)
   }
-  fn input_value(&mut self, dest: Value) -> Result<State, Error> {
-    let value: i64;
-    if self.input.is_empty() {
-      println!("Enter value: ");
-      let mut buffer = String::new();
-      std::io::stdin()
-        .read_line(&mut buffer)
-        .expect("input broke");
-      buffer = buffer.trim().into();
-      println!("input {}", &buffer);
-      value = match buffer.parse() {
-        Ok(val) => val,
-        Err(e) => panic!("{}", e),
-      };
-    } else {
-      value = self.input.pop().unwrap();
-    };
-    self.write_value(dest, value)?;
-    Ok(State::Input)
-  }
   fn output_value(&mut self, src: Value) -> Result<State, Error> {
     let value = self.read_value(src)?;
-    self.output.push(value);
-    Ok(State::Output)
+    Ok(State::Output(self.id, value))
   }
   fn jump(&mut self, (value, dest): (Value, Value), cond: fn(i64) -> bool) -> Result<State, Error> {
     let value = self.read_value(value)?;
@@ -257,60 +246,31 @@ impl Computer {
     }
     Ok(State::Running)
   }
-  fn execute_instruction(&mut self, instruction: Instruction) -> Result<State, Error> {
-    match instruction {
+  fn execute_instruction(&mut self, instruction: Instruction) -> State {
+    let state = match instruction {
       Instruction::Add(params) => self.binary_op(params, |a, b| a + b),
       Instruction::Multiply(params) => self.binary_op(params, |a, b| a * b),
       Instruction::Equals(params) => self.binary_op(params, |a, b| if a == b { 1 } else { 0 }),
       Instruction::LessThan(params) => self.binary_op(params, |a, b| if a < b { 1 } else { 0 }),
       Instruction::JumpIfTrue(params) => self.jump(params, |v| v != 0),
       Instruction::JumpIfFalse(params) => self.jump(params, |v| v == 0),
-      Instruction::Input(dest) => self.input_value(dest),
+      Instruction::Input(dest) => {
+        self.input = Some(dest);
+        Ok(State::Input)
+      }
       Instruction::Output(src) => self.output_value(src),
       Instruction::Halt => Ok(State::Halted),
-    }
-  }
-  fn read_value(&mut self, source: Value) -> Result<i64, Error> {
-    match source {
-      Value::Direct(val) => Ok(val),
-      Value::Stored(addr) => self.read(addr),
-    }
-  }
-  fn step(&mut self) -> Result<State, Error> {
-    let mode_op = self.get_mode_op();
-    match mode_op {
-      Ok(instruction) => self.execute_instruction(instruction),
-      Err(Error::Address(addr)) => {
-        println!("Address error at {}", addr);
-        Ok(State::Crash)
+    };
+    self.state = match state {
+      Ok(state) => state,
+      Err(err) => {
+        self.error = Some(err);
+        State::Crashed
       }
-      Err(err) => Err(err),
-    }
+    };
+    self.state.clone()
   }
-  fn is_running(&mut self) -> bool {
-    match self.step() {
-      Ok(State::Running) => true,
-      Ok(State::Input) => true,
-      Ok(State::Output) => {
-        self.output.iter().for_each(|o| println!("{}", o));
-        true
-      }
-      Ok(State::Halted) => false,
-      Ok(State::Crash) => false,
-      Err(err) => panic!("{}: {}", self.pc, err),
-    }
-  }
-  pub fn set_input(&mut self, input: &[i64]) {
-    input
-      .iter()
-      .rev()
-      .cloned()
-      .for_each(|entry| self.input.push(entry));
-  }
-  pub fn run_to_end(&mut self) -> Vec<i64> {
-    while self.is_running() {}
-    self.output.clone()
-  }
+
   #[cfg(test)]
   fn core(&self) -> Vec<i64> {
     let mut mem: Vec<(i64, i64)> = self.memory.iter().map(|(k, v)| (*k, *v)).collect();
@@ -321,135 +281,125 @@ impl Computer {
 #[cfg(test)]
 mod tests {
   use super::*;
+  const ID: usize = 0;
   #[test]
   fn jumpy_ext_1() {
     let input = [8];
     let program = [3, 3, 1108, -1, 8, 3, 4, 3, 99];
-    let mut computer = Computer::load(&program);
-    computer.set_input(&input);
-    let result = computer.run_to_end();
+    let mut computer = Computer::load(ID, &program);
+    let result = run_to_end(&mut computer, &input);
     assert_eq!(result, vec![1]);
   }
   #[test]
   fn jumpy_ext_2() {
     let input = [42];
     let program = [3, 3, 1108, -1, 8, 3, 4, 3, 99];
-    let mut computer = Computer::load(&program);
-    computer.set_input(&input);
-    let result = computer.run_to_end();
+    let mut computer = Computer::load(ID, &program);
+    let result = run_to_end(&mut computer, &input);
     assert_eq!(result, vec![0]);
   }
   #[test]
   fn jumpy_ext_3() {
     let input = [5];
     let program = [3, 3, 1107, -1, 8, 3, 4, 3, 99];
-    let mut computer = Computer::load(&program);
-    computer.set_input(&input);
-    let result = computer.run_to_end();
+    let mut computer = Computer::load(ID, &program);
+    let result = run_to_end(&mut computer, &input);
     assert_eq!(result, vec![1]);
   }
   #[test]
   fn jumpy_ext_4() {
     let input = [42];
     let program = [3, 3, 1107, -1, 8, 3, 4, 3, 99];
-    let mut computer = Computer::load(&program);
-    computer.set_input(&input);
-    let result = computer.run_to_end();
+    let mut computer = Computer::load(ID, &program);
+    let result = run_to_end(&mut computer, &input);
     assert_eq!(result, vec![0]);
   }
   #[test]
   fn jumpy_1() {
     let input = [8];
     let program = [3, 9, 8, 9, 10, 9, 4, 9, 99, -1, 8];
-    let mut computer = Computer::load(&program);
-    computer.set_input(&input);
-    let result = computer.run_to_end();
+    let mut computer = Computer::load(ID, &program);
+    let result = run_to_end(&mut computer, &input);
     assert_eq!(result, vec![1]);
   }
   #[test]
   fn jumpy_2() {
     let input = [42];
     let program = [3, 9, 8, 9, 10, 9, 4, 9, 99, -1, 8];
-    let mut computer = Computer::load(&program);
-    computer.set_input(&input);
-    let result = computer.run_to_end();
+    let mut computer = Computer::load(ID, &program);
+    let result = run_to_end(&mut computer, &input);
     assert_eq!(result, vec![0]);
   }
   #[test]
   fn jumpy_3() {
     let input = [5];
     let program = [3, 9, 7, 9, 10, 9, 4, 9, 99, -1, 8];
-    let mut computer = Computer::load(&program);
-    computer.set_input(&input);
-    let result = computer.run_to_end();
+    let mut computer = Computer::load(ID, &program);
+    let result = run_to_end(&mut computer, &input);
     assert_eq!(result, vec![1]);
   }
   #[test]
   fn jumpy_4() {
     let input = [42];
     let program = [3, 9, 7, 9, 10, 9, 4, 9, 99, -1, 8];
-    let mut computer = Computer::load(&program);
-    computer.set_input(&input);
-    let result = computer.run_to_end();
+    let mut computer = Computer::load(ID, &program);
+    let result = run_to_end(&mut computer, &input);
     assert_eq!(result, vec![0]);
   }
   #[test]
   fn do_input_1() {
     let input = [42];
     let program = [3, 0, 99];
-    let mut computer = Computer::load(&program);
-    computer.set_input(&input);
-    computer.run_to_end();
+    let mut computer = Computer::load(ID, &program);
+    let result = run_to_end(&mut computer, &input);
     assert_eq!(computer.core(), vec![42, 0, 99]);
   }
   #[test]
   fn do_input_2() {
     let input = [42, 7];
     let program = [3, 0, 3, 1, 99];
-    let mut computer = Computer::load(&program);
-    computer.set_input(&input);
-    computer.run_to_end();
+    let mut computer = Computer::load(ID, &program);
+    let result = run_to_end(&mut computer, &input);
     assert_eq!(computer.core(), vec![42, 7, 3, 1, 99]);
   }
   #[test]
   fn do_output_1() {
     let program = [4, 0, 99];
-    let mut computer = Computer::load(&program);
-    let output = computer.run_to_end();
-    assert_eq!(output, [4]);
+    let mut computer = Computer::load(ID, &program);
+    let result = run_to_end(&mut computer, &[]);
+    assert_eq!(result, [4]);
   }
   #[test]
   fn do_output_2() {
     let program = [4, 0, 4, 4, 99];
-    let mut computer = Computer::load(&program);
-    let output = computer.run_to_end();
-    assert_eq!(output, [4, 99]);
+    let mut computer = Computer::load(ID, &program);
+    let result = run_to_end(&mut computer, &[]);
+    assert_eq!(result, [4, 99]);
   }
 
   #[test]
   fn do_io() {
     let input = [42];
     let program = [3, 0, 4, 0, 99];
-    let mut computer = Computer::load(&program);
-    computer.set_input(&input);
-    let output = computer.run_to_end();
-    assert_eq!(output, input);
+    let mut computer = Computer::load(ID, &program);
+    let result = run_to_end(&mut computer, &input);
+    assert_eq!(result, input);
   }
 
   #[test]
   fn ext_compute_1() {
     let program = vec![1002, 4, 3, 4, 33];
     let expected = vec![1002, 4, 3, 4, 99];
-    let mut computer = Computer::load(&program);
-    computer.run_to_end();
+    let mut computer = Computer::load(ID, &program);
+    run_to_end(&mut computer, &[]);
     assert_eq!(computer.core(), expected);
   }
   #[test]
   fn ext_compute_2() {
     let program = vec![1101, 100, -1, 4, 0];
     let expected = vec![1101, 100, -1, 4, 99];
-    let mut computer = Computer::load(&program);
-    computer.run_to_end();
+    let mut computer = Computer::load(ID, &program);
+    run_to_end(&mut computer, &[]);
     assert_eq!(computer.core(), expected);
   }
 
@@ -457,40 +407,40 @@ mod tests {
   fn compute_1() {
     let program = vec![1, 0, 0, 0, 99];
     let expected = vec![2, 0, 0, 0, 99];
-    let mut computer = Computer::load(&program);
-    computer.run_to_end();
+    let mut computer = Computer::load(ID, &program);
+    run_to_end(&mut computer, &[]);
     assert_eq!(computer.core(), expected);
   }
   #[test]
   fn compute_2() {
     let program = vec![2, 3, 0, 3, 99];
     let expected = vec![2, 3, 0, 6, 99];
-    let mut computer = Computer::load(&program);
-    computer.run_to_end();
+    let mut computer = Computer::load(ID, &program);
+    run_to_end(&mut computer, &[]);
     assert_eq!(computer.core(), expected);
   }
   #[test]
   fn compute_3() {
     let program = vec![2, 4, 4, 5, 99, 0];
     let expected = vec![2, 4, 4, 5, 99, 9801];
-    let mut computer = Computer::load(&program);
-    computer.run_to_end();
+    let mut computer = Computer::load(ID, &program);
+    run_to_end(&mut computer, &[]);
     assert_eq!(computer.core(), expected);
   }
   #[test]
   fn compute_4() {
     let program = vec![1, 1, 1, 4, 99, 5, 6, 0, 99];
     let expected = vec![30, 1, 1, 4, 2, 5, 6, 0, 99];
-    let mut computer = Computer::load(&program);
-    computer.run_to_end();
+    let mut computer = Computer::load(ID, &program);
+    run_to_end(&mut computer, &[]);
     assert_eq!(computer.core(), expected);
   }
   #[test]
   fn compute_5() {
     let program = vec![1, 9, 10, 3, 2, 3, 11, 0, 99, 30, 40, 50];
     let expected = vec![3500, 9, 10, 70, 2, 3, 11, 0, 99, 30, 40, 50];
-    let mut computer = Computer::load(&program);
-    computer.run_to_end();
+    let mut computer = Computer::load(ID, &program);
+    run_to_end(&mut computer, &[]);
     assert_eq!(computer.core(), expected);
   }
   #[test]
@@ -502,7 +452,7 @@ mod tests {
 
   #[test]
   fn find_cent_1() {
-    let comp = Computer::load(&loader::load_integer_row_list("../day/02/input.csv")[0]);
+    let comp = Computer::load(ID, &loader::load_integer_row_list("../day/02/input.csv")[0]);
     let actual = input::find_cent(&comp, 6_627_023).expect("should have a value");
     let expected = input::Input::new(12, 2).cent();
 

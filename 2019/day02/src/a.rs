@@ -1,5 +1,5 @@
 pub fn run() -> String {
-  let comp = icc::Computer::load(&loader::load_integer_row_list("./day/02/input.csv")[0]);
+  let comp = icc::Computer::load(0, &loader::load_integer_row_list("./day/02/input.csv")[0]);
   let result = icc::input::run(&comp, Some(icc::input::Input::new(12, 2)));
 
   format!("{}", result)

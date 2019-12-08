@@ -15,7 +15,7 @@ pub fn run(computer: &super::Computer, input: Option<Input>) -> i64 {
     computer.set(1, input.noun);
     computer.set(2, input.verb);
   }
-  computer.run_to_end();
+  super::run_to_end(&mut computer, &[]);
   computer.get(0)
 }
 trait InputAvailable {
