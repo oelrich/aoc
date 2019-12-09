@@ -1,5 +1,5 @@
 [package]
-name = "loader"
+name = "helpers"
 version = "0.1.0"
 authors = ["Johan Oelrich <johan@oelrich.se>"]
 edition = "2018"

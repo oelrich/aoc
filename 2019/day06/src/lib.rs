@@ -1,7 +1,12 @@
+use helpers::Solvers;
+pub fn solve() -> Solvers {
+  Solvers::new(a::run, b::run)
+}
+
 pub mod a {
   pub fn run() -> String {
     let orbits = super::Orbits::from_strings(
-      &loader::load_as("./day/06/input.csv", |l| l).collect::<Vec<String>>(),
+      &helpers::loader::load_as("./day/06/input.csv", |l| l).collect::<Vec<String>>(),
     );
     format!("{}", orbits.count())
   }
@@ -9,7 +14,7 @@ pub mod a {
 pub mod b {
   pub fn run() -> String {
     let orbits = super::Orbits::from_strings(
-      &loader::load_as("./day/06/input.csv", |l| l).collect::<Vec<String>>(),
+      &helpers::loader::load_as("./day/06/input.csv", |l| l).collect::<Vec<String>>(),
     );
     format!(
       "{}",

@@ -1,5 +1,4 @@
 use std::collections::{HashMap, HashSet};
-extern crate loader;
 #[derive(Hash, PartialEq, Eq, Clone, Copy, Debug, PartialOrd, Ord)]
 struct Point(i64, i64);
 
@@ -191,7 +190,7 @@ impl Move {
 }
 
 fn load_wires() -> Vec<Vec<Move>> {
-  loader::load_as::<Vec<Move>>("./day/03/input.csv", |s| {
+  helpers::loader::load_as::<Vec<Move>>("./day/03/input.csv", |s| {
     Move::many_from_string(&s).unwrap()
   })
   .collect::<Vec<Vec<Move>>>()

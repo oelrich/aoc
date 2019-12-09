@@ -1,7 +1,7 @@
 pub fn run() -> String {
   format!(
     "{}",
-    loader::load_integer_list("./day/01/input.csv").fuel_need()
+    helpers::loader::load_integer_list("./day/01/input.csv").fuel_need()
   )
 }
 

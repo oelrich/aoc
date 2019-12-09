@@ -1,10 +1,16 @@
 use std::collections::HashMap;
+pub mod adama;
 mod error;
-pub mod helpers;
-
 pub mod input;
+mod instruction;
+mod memory;
+mod opcode;
+mod state;
 use error::*;
-use helpers::*;
+use instruction::*;
+use memory::*;
+use opcode::*;
+use state::*;
 
 pub fn run_to_end(computer: &mut Computer, input: &[i64]) -> Result<Vec<i64>, String> {
   let mut input: Vec<i64> = input.iter().cloned().rev().collect();

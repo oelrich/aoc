@@ -1,4 +1,4 @@
-use loader::load_integer_row_list;
+use helpers::loader::load_integer_row_list;
 
 pub fn run() -> String {
   let mut comp = icc::Computer::load(0, &load_integer_row_list("./day/05/input.csv")[0]);

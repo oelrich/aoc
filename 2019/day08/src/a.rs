@@ -1,5 +1,6 @@
 pub fn run() -> String {
-  let data = loader::load_as("./day/08/input.csv", |l| l).collect::<Vec<String>>()[0].clone();
+  let data =
+    helpers::loader::load_as("./day/08/input.csv", |l| l).collect::<Vec<String>>()[0].clone();
   let image = Image::from_string(25, 6, data);
   write_image(&image);
   "whee!".to_owned()
