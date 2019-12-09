@@ -3,6 +3,7 @@ use helpers::Solvers;
 
 fn main() {
   let mut solutions: Vec<Solvers> = vec![
+    day10::solve(),
     day09::solve(),
     day08::solve(),
     day07::solve(),
