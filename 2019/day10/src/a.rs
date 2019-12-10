@@ -16,7 +16,9 @@ impl Point {
 pub struct Line {
   x_delta: isize,
   y_delta: isize,
-  a: Point,
+  low: Point,
+  high: Point,
+  o: Point,
 }
 
 impl Line {
@@ -26,12 +28,25 @@ impl Line {
     Line {
       x_delta,
       y_delta,
-      a: a.clone(),
+      low: Point {
+        x: a.x.min(b.x),
+        y: a.y.min(b.y),
+      },
+      high: Point {
+        x: a.x.max(b.x),
+        y: a.y.max(b.y),
+      },
+      o: a,
     }
   }
+  pub fn segment_has_point(&self, p: &Point) -> bool {
+    let px = self.y_delta * (p.x - self.o.x);
+    let py = self.x_delta * (p.y - self.o.y);
+    px == py && p.y > self.low.y && p.y < self.high.y && p.x > self.low.x && p.x < self.high.x
+  }
   pub fn has_point(&self, p: &Point) -> bool {
-    let px = self.y_delta * (p.x - self.a.x);
-    let py = self.x_delta * (p.y - self.a.y);
+    let px = self.y_delta * (p.x - self.o.x);
+    let py = self.x_delta * (p.y - self.o.y);
     px == py
   }
 }
@@ -72,56 +87,39 @@ impl Asteroid {
       .flat_map(|(y, row)| Asteroid::from_string(&row, y as isize))
       .collect()
   }
-  pub fn dist(&self, a: &Asteroid) -> f64 {
-    let x_delta = (a.0 - self.0) as f64;
-    let y_delta = (a.1 - self.1) as f64;
-    (x_delta.powi(2) + y_delta.powi(2)).sqrt()
-  }
-}
-use std::collections::HashMap;
-
-fn take_key_value(hm: &mut HashMap<Asteroid, isize>) -> Option<(Asteroid, isize)> {
-  let entry = hm.iter().last().map(|(a, u)| (*a, *u));
-  if let Some((a, u)) = entry {
-    hm.remove(&a);
-    return Some((a, u));
-  }
-  None
 }
 
-fn hidden(source: &Asteroid, target: &Asteroid, obstacles: &Vec<Asteroid>) -> bool {
-  let dist_to_target = source.dist(&target);
+fn hidden(source: &Asteroid, target: &Asteroid, obstacles: &[Asteroid]) -> bool {
   let line = Line::from(source.point(), target.point());
-
-  obstacles
-    .iter()
-    .any(|o| line.has_point(&o.point()) && source.dist(o) < dist_to_target)
+  for obstacle in obstacles {
+    if line.segment_has_point(&obstacle.point()) {
+      return true;
+    }
+  }
+  false
 }
 
-fn can_see(asteroid: &Asteroid, space: &Vec<Asteroid>) -> Vec<Asteroid> {
-  let mut available: Vec<Asteroid> = space.iter().cloned().collect();
+fn can_see(asteroid: &Asteroid, space: &[Asteroid]) -> Vec<Asteroid> {
   let mut visible: Vec<Asteroid> = Vec::new();
-  while let Some(target) = available.pop() {
-    if !hidden(asteroid, &target, &visible) {
-      visible.push(target);
+  for target in space.iter().clone() {
+    if !hidden(asteroid, target, &space) {
+      visible.push(target.clone());
     }
   }
   visible
 }
-fn visibility(map: &Vec<Asteroid>) -> Vec<(Asteroid, isize)> {
-  let mut start: HashMap<Asteroid, isize> = map.iter().cloned().map(|a| (a, 0)).collect();
+
+fn visibility(map: &[Asteroid]) -> Vec<(Asteroid, isize)> {
   let mut done: Vec<(Asteroid, isize)> = Vec::new();
-  while let Some((asteroid, count)) = take_key_value(&mut start) {
-    let visible = can_see(&asteroid, &start.keys().map(|a| *a).collect());
-    let count_update = count + visible.len() as isize;
-    visible.iter().for_each(|a| {
-      let count = start.get_mut(a).unwrap();
-      *count += 1;
-    });
-    done.push((asteroid, count_update));
+  for asteroid in map.iter().clone() {
+    let visible = can_see(asteroid, map);
+    done.push((*asteroid, visible.len() as isize));
   }
   done.sort_by_key(|(_a, c)| *c);
   done
+    .iter()
+    .map(|(a, c)| (*a, c - 1))
+    .collect::<Vec<(Asteroid, isize)>>()
 }
 
 #[cfg(test)]
@@ -152,6 +150,62 @@ mod tests {
     assert!(l.has_point(&c));
   }
   #[test]
+  fn line_4() {
+    let a = Point::new(2, 2);
+    let b = Point::new(1, 1);
+    let l = Line::from(a, b);
+    let c = Point::new(2, -2);
+    assert!(!l.has_point(&c));
+  }
+  #[test]
+  fn segment_1() {
+    let a = Point::new(0, 0);
+    let b = Point::new(7, 7);
+    let l = Line::from(a, b);
+    let c = Point::new(134, 134);
+    assert!(!l.segment_has_point(&c));
+  }
+  #[test]
+  fn segment_1b() {
+    let a = Point::new(0, 0);
+    let b = Point::new(134, 134);
+    let l = Line::from(a, b);
+    let c = Point::new(7, 7);
+    assert!(l.segment_has_point(&c));
+  }
+  #[test]
+  fn segment_1c() {
+    let a = Point::new(0, 0);
+    let b = Point::new(134, 134);
+    let l = Line::from(a, b);
+    let c = Point::new(-7, -7);
+    assert!(!l.segment_has_point(&c));
+  }
+  #[test]
+  fn segment_2() {
+    let a = Point::new(1, 1);
+    let b = Point::new(1 + 3 * 1, 1 + 3 * 2);
+    let l = Line::from(a, b);
+    let c = Point::new(2, 3);
+    assert!(l.segment_has_point(&c));
+  }
+  #[test]
+  fn segment_3() {
+    let a = Point::new(2, 2);
+    let b = Point::new(-2, -2);
+    let l = Line::from(a, b);
+    let c = Point::new(1, 1);
+    assert!(l.segment_has_point(&c));
+  }
+  #[test]
+  fn segment_4() {
+    let a = Point::new(2, 2);
+    let b = Point::new(1, 1);
+    let l = Line::from(a, b);
+    let c = Point::new(2, -2);
+    assert!(!l.segment_has_point(&c));
+  }
+  #[test]
   fn asteroid_line_1() {
     let actual = Asteroid::from_string(".#..#", 0);
     let expected = vec![Asteroid(1, 0), Asteroid(4, 0)];
@@ -175,6 +229,13 @@ mod tests {
     assert_eq!(actual, expected);
   }
   #[test]
+  fn small_1() {
+    let map = Asteroid::from_lines(vec![".#..#", ".....", "#####", "....#", "...##"]);
+    let expected = Asteroid(3, 4);
+    let actual = visibility(&map).pop().map(|(a, _u)| a).unwrap();
+    assert_eq!(actual, expected);
+  }
+  #[test]
   fn small_2() {
     let map = Asteroid::from_lines(vec![".#..#", ".....", "#####", "....#", "...##"]);
     let mut actual = visibility(&map);
@@ -195,10 +256,81 @@ mod tests {
     assert_eq!(actual, expected);
   }
   #[test]
-  fn small_1() {
-    let map = Asteroid::from_lines(vec![".#..#", ".....", "#####", "....#", "...##"]);
-    let expected = Asteroid(3, 4);
-    let actual = visibility(&map).pop().map(|(a, _u)| a).unwrap();
+  fn small_3() {
+    let map = Asteroid::from_lines(vec![".#.", ".#.", ".#."]);
+    assert_eq!(map, vec![Asteroid(1, 0), Asteroid(1, 1), Asteroid(1, 2)]);
+    let mut actual = visibility(&map);
+    actual.sort();
+    assert_eq!(can_see(&map[0], &map), vec![Asteroid(1, 0), Asteroid(1, 1)]);
+    assert_eq!(
+      can_see(&map[1], &map),
+      vec![Asteroid(1, 0), Asteroid(1, 1), Asteroid(1, 2)]
+    );
+    assert_eq!(can_see(&map[2], &map), vec![Asteroid(1, 1), Asteroid(1, 2)]);
+    let mut expected = vec![
+      (Asteroid(1, 0), 1),
+      (Asteroid(1, 1), 2),
+      (Asteroid(1, 2), 1),
+    ];
+    expected.sort();
     assert_eq!(actual, expected);
+  }
+  #[test]
+  fn can_see_1() {
+    let mut map = Asteroid::from_lines(vec![".#.", ".#.", ".#.", ".#."]);
+    map.sort();
+    let asteroid = Asteroid(1, 1);
+    let mut actual = can_see(&asteroid, &map);
+    actual.sort();
+    assert_ne!(actual, map);
+    let mut expected = vec![Asteroid(1, 0), Asteroid(1, 1), Asteroid(1, 2)];
+    expected.sort();
+    assert_eq!(actual, expected);
+  }
+  #[test]
+  fn can_see_2() {
+    let map = Asteroid::from_lines(vec!["..#..", "..#..", ".##..", "#.#..", "..#.."]);
+    let asteroid = Asteroid(2, 1);
+    let mut actual = can_see(&asteroid, &map);
+    actual.sort();
+    let mut expected = vec![
+      Asteroid(1, 2),
+      Asteroid(2, 0),
+      Asteroid(2, 1),
+      Asteroid(2, 2),
+    ];
+    expected.sort();
+    assert_eq!(actual, expected);
+  }
+  #[test]
+  fn can_see_3() {
+    let map = vec![Asteroid(0, 0), Asteroid(1, 0), Asteroid(2, 0)];
+    let asteroid = Asteroid(0, 0);
+    let mut actual = can_see(&asteroid, &map);
+    actual.sort();
+    let mut expected = vec![Asteroid(0, 0), Asteroid(1, 0)];
+    expected.sort();
+    assert_eq!(actual, expected);
+  }
+  #[test]
+  fn hidden_1() {
+    let source = Asteroid(1, 1);
+    let target = Asteroid(3, 3);
+    let obstacles = vec![];
+    assert!(!hidden(&source, &target, &obstacles));
+  }
+  #[test]
+  fn hidden_2() {
+    let source = Asteroid(1, 1);
+    let target = Asteroid(3, 3);
+    let obstacles = vec![Asteroid(2, 2)];
+    assert!(hidden(&source, &target, &obstacles));
+  }
+  #[test]
+  fn hidden_3() {
+    let source = Asteroid(1, 1);
+    let target = Asteroid(3, 7);
+    let obstacles = vec![Asteroid(2, 2), Asteroid(2, 4)];
+    assert!(hidden(&source, &target, &obstacles));
   }
 }
