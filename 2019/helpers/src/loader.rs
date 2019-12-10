@@ -1,7 +1,7 @@
 use std::fs::File;
 use std::io::{prelude::*, BufReader};
 
-fn read_as_iter(path: &str) -> impl Iterator<Item = String> {
+pub fn read_as_iter(path: &str) -> impl Iterator<Item = String> {
   let file = File::open(path).expect("should have found the file");
   let reader = BufReader::new(file);
   reader.lines().map(Result::unwrap)
