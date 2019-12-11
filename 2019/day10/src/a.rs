@@ -44,6 +44,7 @@ impl Line {
     self.o.distance(&self.t)
   }
 
+  #[cfg(test)]
   fn closer_to_o_than_t(&self, p: &Point) -> bool {
     let dist_origin_target = self.len();
     let dist_origin_point = self.o.distance(p);

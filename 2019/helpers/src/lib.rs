@@ -1,3 +1,4 @@
+pub mod coordinates;
 pub mod loader;
 pub mod mathy;
 pub struct Solvers(fn() -> String, fn() -> String);
