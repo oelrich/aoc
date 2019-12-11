@@ -1,7 +1,7 @@
 pub fn run() -> String {
-  let asteroids = Asteroid::from_file("../day/10/input.map");
-  let _best_visibility = visibility(&asteroids);
-  "Aaaaah!".to_owned()
+  let asteroids = Asteroid::from_file("./day/10/input.map");
+  let (asteroid, visible) = visibility(&asteroids).pop().unwrap();
+  format!("From {} we see {} asteroids.", asteroid, visible)
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Point {
@@ -12,13 +12,21 @@ impl Point {
   pub fn new(x: isize, y: isize) -> Point {
     Point { x, y }
   }
+  pub fn distance(&self, p: &Point) -> f64 {
+    (((self.x - p.x) as f64).powi(2) + ((self.y - p.y) as f64).powi(2)).sqrt()
+  }
+  pub fn sub(&self, p: &Point) -> Point {
+    Point {
+      x: self.x - p.x,
+      y: self.y - p.y,
+    }
+  }
 }
 pub struct Line {
   x_delta: isize,
   y_delta: isize,
-  low: Point,
-  high: Point,
   o: Point,
+  t: Point,
 }
 
 impl Line {
@@ -28,23 +36,40 @@ impl Line {
     Line {
       x_delta,
       y_delta,
-      low: Point {
-        x: a.x.min(b.x),
-        y: a.y.min(b.y),
-      },
-      high: Point {
-        x: a.x.max(b.x),
-        y: a.y.max(b.y),
-      },
       o: a,
+      t: b,
     }
   }
-  pub fn segment_has_point(&self, p: &Point) -> bool {
-    let px = self.y_delta * (p.x - self.o.x);
-    let py = self.x_delta * (p.y - self.o.y);
-    px == py && p.y > self.low.y && p.y < self.high.y && p.x > self.low.x && p.x < self.high.x
+  fn len(&self) -> f64 {
+    self.o.distance(&self.t)
   }
-  pub fn has_point(&self, p: &Point) -> bool {
+
+  fn closer_to_o_than_t(&self, p: &Point) -> bool {
+    let dist_origin_target = self.len();
+    let dist_origin_point = self.o.distance(p);
+    if dist_origin_point <= dist_origin_target {
+      return true;
+    }
+    let mod_p = p.sub(&self.t);
+    let dist_origin_mod_point = self.o.distance(&mod_p);
+    if dist_origin_point <= dist_origin_mod_point {
+      return true;
+    }
+    false
+  }
+
+  fn between(&self, p: &Point) -> bool {
+    let fp_error_margin: f64 = 0.01;
+    let dop = self.o.distance(p);
+    let dpt = p.distance(&self.t);
+    let err = self.len() - dop - dpt;
+    err.abs() < fp_error_margin
+  }
+
+  pub fn blocking(&self, p: &Point) -> bool {
+    self.is_on_line(p) && self.between(p)
+  }
+  pub fn is_on_line(&self, p: &Point) -> bool {
     let px = self.y_delta * (p.x - self.o.x);
     let py = self.x_delta * (p.y - self.o.y);
     px == py
@@ -52,7 +77,11 @@ impl Line {
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 struct Asteroid(isize, isize);
-
+impl std::fmt::Display for Asteroid {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(f, "#({},{})", self.0, self.1)
+  }
+}
 impl Asteroid {
   pub fn point(&self) -> Point {
     Point {
@@ -90,9 +119,15 @@ impl Asteroid {
 }
 
 fn hidden(source: &Asteroid, target: &Asteroid, obstacles: &[Asteroid]) -> bool {
+  if source == target {
+    return false;
+  }
   let line = Line::from(source.point(), target.point());
-  for obstacle in obstacles {
-    if line.segment_has_point(&obstacle.point()) {
+  for obstacle in obstacles
+    .iter()
+    .filter(|obstacle| source != *obstacle && target != *obstacle)
+  {
+    if line.blocking(&obstacle.point()) {
       return true;
     }
   }
@@ -101,11 +136,12 @@ fn hidden(source: &Asteroid, target: &Asteroid, obstacles: &[Asteroid]) -> bool 
 
 fn can_see(asteroid: &Asteroid, space: &[Asteroid]) -> Vec<Asteroid> {
   let mut visible: Vec<Asteroid> = Vec::new();
-  for target in space.iter().clone() {
-    if !hidden(asteroid, target, &space) {
-      visible.push(target.clone());
+  space.iter().cloned().for_each(|target| {
+    if !hidden(asteroid, &target, space) {
+      visible.push(target)
     }
-  }
+  });
+
   visible
 }
 
@@ -131,7 +167,7 @@ mod tests {
     let b = Point::new(7, 7);
     let l = Line::from(a, b);
     let c = Point::new(134, 134);
-    assert!(l.has_point(&c));
+    assert!(l.is_on_line(&c));
   }
   #[test]
   fn line_2() {
@@ -139,7 +175,7 @@ mod tests {
     let b = Point::new(1, 1);
     let l = Line::from(a, b);
     let c = Point::new(1 + 3 * 1, 1 + 3 * 2);
-    assert!(l.has_point(&c));
+    assert!(l.is_on_line(&c));
   }
   #[test]
   fn line_3() {
@@ -147,7 +183,7 @@ mod tests {
     let b = Point::new(1, 1);
     let l = Line::from(a, b);
     let c = Point::new(-2, -2);
-    assert!(l.has_point(&c));
+    assert!(l.is_on_line(&c));
   }
   #[test]
   fn line_4() {
@@ -155,15 +191,32 @@ mod tests {
     let b = Point::new(1, 1);
     let l = Line::from(a, b);
     let c = Point::new(2, -2);
-    assert!(!l.has_point(&c));
+    assert!(!l.is_on_line(&c));
+  }
+  #[test]
+  fn line_5() {
+    let a = Point::new(1, 1);
+    let b = Point::new(0, 1);
+    let l = Line::from(a, b);
+    let c = Point::new(2, 1);
+    assert!(l.is_on_line(&c));
+  }
+  #[test]
+  fn line_6() {
+    let a = Point::new(1, 1);
+    let b = Point::new(1, 0);
+    let l = Line::from(a, b);
+    let c = Point::new(1, 2);
+    assert!(l.is_on_line(&c));
   }
   #[test]
   fn segment_1() {
     let a = Point::new(0, 0);
     let b = Point::new(7, 7);
     let l = Line::from(a, b);
-    let c = Point::new(134, 134);
-    assert!(!l.segment_has_point(&c));
+    let c = Point::new(15, 15);
+    assert!(l.is_on_line(&c));
+    assert!(!l.blocking(&c));
   }
   #[test]
   fn segment_1b() {
@@ -171,7 +224,7 @@ mod tests {
     let b = Point::new(134, 134);
     let l = Line::from(a, b);
     let c = Point::new(7, 7);
-    assert!(l.segment_has_point(&c));
+    assert!(l.blocking(&c));
   }
   #[test]
   fn segment_1c() {
@@ -179,7 +232,24 @@ mod tests {
     let b = Point::new(134, 134);
     let l = Line::from(a, b);
     let c = Point::new(-7, -7);
-    assert!(!l.segment_has_point(&c));
+    assert!(!l.blocking(&c));
+  }
+  #[test]
+  fn segment_1d() {
+    let a = Point::new(0, 0);
+    let b = Point::new(134, 134);
+    let l = Line::from(a, b);
+    let c = Point::new(137, 137);
+    assert!(!l.blocking(&c));
+  }
+  #[test]
+  fn segment_1e() {
+    let a = Point::new(0, 0);
+    let b = Point::new(7, 7);
+    let l = Line::from(a, b);
+    let c = Point::new(-134, -134);
+    assert!(l.is_on_line(&c));
+    assert!(!l.blocking(&c));
   }
   #[test]
   fn segment_2() {
@@ -187,7 +257,7 @@ mod tests {
     let b = Point::new(1 + 3 * 1, 1 + 3 * 2);
     let l = Line::from(a, b);
     let c = Point::new(2, 3);
-    assert!(l.segment_has_point(&c));
+    assert!(l.blocking(&c));
   }
   #[test]
   fn segment_3() {
@@ -195,7 +265,7 @@ mod tests {
     let b = Point::new(-2, -2);
     let l = Line::from(a, b);
     let c = Point::new(1, 1);
-    assert!(l.segment_has_point(&c));
+    assert!(l.blocking(&c));
   }
   #[test]
   fn segment_4() {
@@ -203,7 +273,7 @@ mod tests {
     let b = Point::new(1, 1);
     let l = Line::from(a, b);
     let c = Point::new(2, -2);
-    assert!(!l.segment_has_point(&c));
+    assert!(!l.blocking(&c));
   }
   #[test]
   fn asteroid_line_1() {
@@ -276,7 +346,7 @@ mod tests {
     assert_eq!(actual, expected);
   }
   #[test]
-  fn can_see_1() {
+  fn can_see_1a() {
     let mut map = Asteroid::from_lines(vec![".#.", ".#.", ".#.", ".#."]);
     map.sort();
     let asteroid = Asteroid(1, 1);
@@ -284,6 +354,17 @@ mod tests {
     actual.sort();
     assert_ne!(actual, map);
     let mut expected = vec![Asteroid(1, 0), Asteroid(1, 1), Asteroid(1, 2)];
+    expected.sort();
+    assert_eq!(actual, expected);
+  }
+  #[test]
+  fn can_see_1b() {
+    let mut map = Asteroid::from_lines(vec!["...", "###", "..."]);
+    map.sort();
+    let asteroid = Asteroid(1, 1);
+    let mut actual = can_see(&asteroid, &map);
+    actual.sort();
+    let mut expected = vec![Asteroid(0, 1), Asteroid(1, 1), Asteroid(2, 1)];
     expected.sort();
     assert_eq!(actual, expected);
   }
@@ -332,5 +413,133 @@ mod tests {
     let target = Asteroid(3, 7);
     let obstacles = vec![Asteroid(2, 2), Asteroid(2, 4)];
     assert!(hidden(&source, &target, &obstacles));
+  }
+  #[test]
+  fn hidden_4a() {
+    let mut map = Asteroid::from_lines(vec!["...", "###", "..."]);
+    map.sort();
+    let asteroid = Asteroid(1, 1);
+    let target = Asteroid(2, 1);
+    assert!(!hidden(&asteroid, &target, &map));
+  }
+  #[test]
+  fn hidden_4b() {
+    let source = Asteroid(1, 1);
+    let target = Asteroid(2, 1);
+    let obstacles = vec![Asteroid(0, 1), Asteroid(1, 1), Asteroid(2, 1)];
+    assert!(!hidden(&source, &target, &obstacles));
+  }
+  #[test]
+  fn hidden_4b_a() {
+    let source = Asteroid(1, 1);
+    let target = Asteroid(2, 1);
+    let obstacles = vec![Asteroid(0, 1)];
+    assert!(!hidden(&source, &target, &obstacles));
+  }
+  #[test]
+  fn hidden_4c() {
+    let source = Asteroid(1, 1);
+    let target = Asteroid(3, 1);
+    let obstacles = vec![
+      Asteroid(0, 1),
+      Asteroid(1, 1),
+      Asteroid(2, 1),
+      Asteroid(3, 1),
+    ];
+    assert!(hidden(&source, &target, &obstacles));
+  }
+  #[test]
+  fn hidden_4d() {
+    let map = Asteroid::from_lines(vec!["...", "###", "..."]);
+    let obstacles = vec![Asteroid(0, 1), Asteroid(1, 1), Asteroid(2, 1)];
+    assert_eq!(map, obstacles);
+  }
+  #[test]
+  fn hidden_4e() {
+    let asteroid = Asteroid(1, 1);
+    let target = Asteroid(2, 1);
+    assert!(!hidden(&asteroid, &target, &[Asteroid(0, 1)]));
+  }
+  #[test]
+  fn hidden_4f() {
+    let asteroid = Asteroid(1, 1);
+    let target = Asteroid(2, 1);
+    assert!(!hidden(&asteroid, &target, &[Asteroid(0, 0)]));
+  }
+  #[test]
+  fn hidden_4g() {
+    let asteroid = Asteroid(1, 1);
+    let target = Asteroid(2, 1);
+    assert!(!hidden(&asteroid, &target, &[Asteroid(1, 0)]));
+  }
+  #[test]
+  fn hidden_4h() {
+    let asteroid = Asteroid(1, 1);
+    let target = Asteroid(2, 1);
+    assert!(!hidden(&asteroid, &target, &[Asteroid(2, 0)]));
+  }
+  #[test]
+  fn closer_1() {
+    let asteroid = Point::new(1, 1);
+    let target = Point::new(2, 1);
+    let line = Line::from(asteroid, target);
+    let point = Point::new(3, 1);
+    assert!(!line.closer_to_o_than_t(&point));
+  }
+  #[test]
+  fn closer_2() {
+    let asteroid = Point::new(1, 1);
+    let target = Point::new(2, 1);
+    let line = Line::from(asteroid, target);
+    let point = Point::new(0, 1);
+    assert!(line.closer_to_o_than_t(&point));
+  }
+  #[test]
+  fn closer_3() {
+    let asteroid = Point::new(1, 1);
+    let target = Point::new(2, 1);
+    let line = Line::from(asteroid, target);
+    let point = Point::new(-5, 1);
+    assert!(line.closer_to_o_than_t(&point));
+  }
+  #[test]
+  fn closer_4() {
+    let asteroid = Point::new(1, 1);
+    let target = Point::new(4, 1);
+    let line = Line::from(asteroid, target);
+    let point = Point::new(3, 1);
+    assert!(line.closer_to_o_than_t(&point));
+  }
+  #[test]
+  fn closer_5() {
+    let asteroid = Point::new(1, 1);
+    let target = Point::new(42, 1);
+    let line = Line::from(asteroid, target);
+    let point = Point::new(3, 1);
+    assert!(line.closer_to_o_than_t(&point));
+  }
+  #[test]
+  fn closer_6() {
+    let asteroid = Point::new(1, 1);
+    let target = Point::new(42, 1);
+    let line = Line::from(asteroid, target);
+    let point = Point::new(80, 1);
+    assert!(!line.closer_to_o_than_t(&point));
+  }
+  #[test]
+  fn closer_7() {
+    let asteroid = Point::new(1, 1);
+    let target = Point::new(42, 1);
+    let line = Line::from(asteroid, target);
+    let point = Point::new(-80, 1);
+    assert!(line.closer_to_o_than_t(&point));
+  }
+  #[test]
+  fn closer_8() {
+    let asteroid = Point::new(1, 1);
+    let target = Point::new(42, 1);
+    let line = Line::from(asteroid, target);
+    let point = Point::new(-41, 1);
+    assert!(line.closer_to_o_than_t(&point));
   }
 }
