@@ -14,10 +14,12 @@ pub fn run() -> String {
     })
     .collect();
   visible_asteroids.sort_by(|(_, d0), (_, d1)| d0.partial_cmp(d1).unwrap());
-  visible_asteroids.reverse();
-  let (asteroid, clock) = visible_asteroids[0];
+  //visible_asteroids.reverse();
+  let count = 200;
+  let (asteroid, clock) = visible_asteroids[count];
   format!(
-    "From our vantage point we see {} at {} oclock.",
+    "From our vantage point we see number {}, the magnificient {} at {} o'clock. (not 32,9)",
+    count,
     asteroid,
     12.0 + 12.0 * clock
   )

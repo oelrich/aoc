@@ -34,8 +34,9 @@ impl Polar {
     }
   }
   pub fn clockwise(&self) -> f64 {
-    (self.radians)
-    //    ((self.radians / (2.0 * PI)) - 0.25).abs()
+    let twelve = self.radians - (PI / 2.0);
+    let reverse = (2.0 * PI - twelve) % (2.0 * PI);
+    reverse / (2.0 * PI)
   }
   fn arc_tan_it(x: isize, y: isize) -> f64 {
     let result = if y == 0 {
@@ -49,7 +50,7 @@ impl Polar {
       Quadrant::PlusPlus => result,
       Quadrant::MinusPlus => PI - result,
       Quadrant::MinusMinus => PI + result,
-      Quadrant::PlusMinus => PI + result,
+      Quadrant::PlusMinus => 2.0 * PI - result,
     }
   }
   pub fn of_cartesian(x: isize, y: isize) -> Polar {
