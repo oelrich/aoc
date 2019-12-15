@@ -3,18 +3,20 @@ use helpers::Solvers;
 
 fn main() {
   let mut solutions: Vec<Solvers> = vec![
+    day14::solve(),
+    day13::solve(),
     day12::solve(),
     day11::solve(),
     day10::solve(),
-    day09::solve(),
-    day08::solve(),
-    day07::solve(),
-    day06::solve(),
-    day05::solve(),
-    day04::solve(),
-    day03::solve(),
-    day02::solve(),
-    day01::solve(),
+    // day09::solve(),
+    // day08::solve(),
+    // day07::solve(),
+    // day06::solve(),
+    // day05::solve(),
+    // day04::solve(),
+    // day03::solve(),
+    // day02::solve(),
+    // day01::solve(),
   ];
   solutions.reverse();
   let matches = App::new("Advent of Code")

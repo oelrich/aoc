@@ -5,7 +5,7 @@ pub mod input;
 mod instruction;
 mod memory;
 mod opcode;
-mod state;
+pub mod state;
 use error::*;
 use instruction::*;
 use memory::*;
