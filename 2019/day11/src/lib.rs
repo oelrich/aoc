@@ -1,3 +1,4 @@
+use helpers::vector::v2d::Point;
 use helpers::Solvers;
 use std::collections::HashMap;
 pub fn solve() -> Solvers {
@@ -7,9 +8,9 @@ mod a {
   use super::*;
   pub fn run() -> String {
     let program = helpers::loader::load_integer_row_list("./day/11/input.csv")[0].clone();
-    let mut jhonny = Robot::new(&program);
+    let mut johnny_5 = Robot::new(&program);
     let mut panel = Panel::new();
-    jhonny.run(&mut panel);
+    johnny_5.run(&mut panel);
 
     format!("{}", panel.map.len())
   }
@@ -19,29 +20,35 @@ mod b {
     "bah".into()
   }
 }
-
 struct Panel {
-  map: HashMap<(isize, isize), i64>,
+  map: HashMap<Point, i64>,
+  bottom_right: Point,
+  top_left: Point,
 }
 
 impl Panel {
   pub fn new() -> Panel {
     Panel {
       map: HashMap::new(),
+      bottom_right: Point::zero(),
+      top_left: Point::zero(),
     }
   }
-  pub fn look(&self, pos: (isize, isize)) -> i64 {
+  pub fn look(&self, pos: Point) -> i64 {
     if self.map.contains_key(&pos) {
       let value = self.map[&pos];
       return value;
     }
     0
   }
-  pub fn paint_black(&mut self, pos: (isize, isize)) {
-    self.map.insert(pos, 0);
+  fn update_map(&mut self, pos: Point, value: i64) {
+    self.map.insert(pos, value);
   }
-  pub fn paint_white(&mut self, pos: (isize, isize)) {
-    self.map.insert(pos, 1);
+  pub fn paint_black(&mut self, pos: Point) {
+    self.update_map(pos, 0);
+  }
+  pub fn paint_white(&mut self, pos: Point) {
+    self.update_map(pos, 1);
   }
 }
 
@@ -73,7 +80,7 @@ impl Direction {
 }
 
 struct Robot {
-  position: (isize, isize),
+  position: Point,
   direction: Direction,
   brain: icc::Computer,
 }
@@ -82,17 +89,17 @@ use icc::state::State;
 impl Robot {
   pub fn new(program: &[i64]) -> Robot {
     Robot {
-      position: (0, 0),
+      position: Point::zero(),
       direction: Direction::Up,
       brain: icc::Computer::load(5, program),
     }
   }
   fn advance(&mut self) {
     match self.direction {
-      Direction::Up => self.position = (self.position.0, self.position.1 + 1),
-      Direction::Right => self.position = (self.position.0 + 1, self.position.1),
-      Direction::Down => self.position = (self.position.0, self.position.1 - 1),
-      Direction::Left => self.position = (self.position.0 - 1, self.position.1),
+      Direction::Up => self.position = self.position.add(Point::y(1)),
+      Direction::Right => self.position = self.position.add(Point::x(1)),
+      Direction::Down => self.position = self.position.add(Point::y(-1)),
+      Direction::Left => self.position = self.position.add(Point::x(-1)),
     }
   }
   pub fn run(&mut self, panel: &mut Panel) {
@@ -106,8 +113,8 @@ impl Robot {
         State::Output(_id, value) => {
           if paint {
             match value {
-              0 => panel.paint_black(self.position),
-              1 => panel.paint_white(self.position),
+              0 => panel.paint_black(&self.position),
+              1 => panel.paint_white(&self.position),
               err => panic!("{} is invalid paint!", err),
             }
           } else {
@@ -133,9 +140,13 @@ impl Robot {
 
 #[cfg(test)]
 mod tests {
+  use super::*;
   #[test]
   fn goodish() {
     // 2008 för lågt
-    assert_eq!(super::a::run(), "".to_owned());
+    let program = helpers::loader::load_integer_row_list("../day/11/input.csv")[0].clone();
+    let mut johnny_5 = Robot::new(&program);
+    let mut panel = Panel::new();
+    johnny_5.run(&mut panel);
   }
 }

@@ -78,7 +78,7 @@ mod tests {
       1005, 28, 6, 99, 0, 0, 5,
     ];
     let mut amps = Amplifiers::new(&program, &[9, 8, 7, 6, 5]);
-    let actual = amps.run_to_end(0);
+    let actual = amps.run_to_end(Some(0));
     assert_eq!(actual, 139_629_729);
   }
   #[test]
@@ -89,7 +89,7 @@ mod tests {
       56, -1, 56, 1005, 56, 6, 99, 0, 0, 0, 0, 10,
     ];
     let mut amps = Amplifiers::new(&program, &[9, 7, 8, 5, 6]);
-    let actual = amps.run_to_end(0);
+    let actual = amps.run_to_end(Some(0));
     assert_eq!(actual, 18_216);
   }
 }

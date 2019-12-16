@@ -566,7 +566,10 @@ mod tests {
 
   #[test]
   fn find_cent_1() {
-    let comp = Computer::load(ID, &loader::load_integer_row_list("../day/02/input.csv")[0]);
+    let comp = Computer::load(
+      ID,
+      &helpers::loader::load_integer_row_list("../day/02/input.csv")[0],
+    );
     let actual = input::find_cent(&comp, 6_627_023).expect("should have a value");
     let expected = input::Input::new(12, 2).cent();
 
