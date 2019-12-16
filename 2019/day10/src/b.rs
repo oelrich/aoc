@@ -1,28 +1,47 @@
 use helpers::coordinates::Polar;
 
 pub fn run() -> String {
-  let asteroids = Asteroid::from_file("./day/10/input.map");
-  let (asteroid, visible) = visibility(&asteroids).pop().unwrap();
+  let map = Asteroid::from_file("./day/10/input.map");
 
-  let mut visible_asteroids: Vec<(Asteroid, f64)> = can_see(&asteroid, &asteroids)
-    .iter()
-    .cloned()
-    .filter(|a| *a != asteroid)
-    .map(|a| {
-      let p = Polar::new(a.0 as f64, a.1 as f64);
-      (a, p.clockwise())
-    })
-    .collect();
-  visible_asteroids.sort_by(|(_, d0), (_, d1)| d0.partial_cmp(d1).unwrap());
-  //visible_asteroids.reverse();
+  let mut visible = visibility(&map);
+  let actual = visible.pop().map(|(a, _u)| a).unwrap();
+  let sorted = sort_clockwise_from(&actual, &map);
+  let nth = |p: usize| sorted.iter().nth(p - 1).unwrap();
   let count = 200;
-  let (asteroid, clock) = visible_asteroids[count];
+  let (asteroid, clock) = nth(count);
   format!(
-    "From our vantage point we see number {}, the magnificient {} at {} o'clock. (not 32,9)",
+    "From our vantage point we see number {}, the magnificent {} at {} o'clock. (not 32,9)",
     count,
     asteroid,
     12.0 + 12.0 * clock
   )
+}
+
+fn find_by_sweep(count: usize, asteroids: &Vec<Asteroid>) -> (Asteroid, f64) {
+  assert!(!asteroids.is_empty());
+
+  let (asteroid, _visible) = visibility(&asteroids).pop().unwrap();
+
+  sort_clockwise_from(&asteroid, &asteroids)[count]
+}
+fn clock(origin: &Asteroid, target: &Asteroid) -> f64 {
+  let p = Polar::of_cartesian(target.0 - origin.0, -(target.1 - origin.1));
+
+  p.clockwise()
+}
+fn sort_clockwise_from(asteroid: &Asteroid, asteroids: &Vec<Asteroid>) -> Vec<(Asteroid, f64)> {
+  let mut visible_asteroids: Vec<(Asteroid, f64)> = can_see(&asteroid, &asteroids)
+    .iter()
+    .cloned()
+    .filter(|a| a != asteroid)
+    .map(|a| {
+      let clock = clock(asteroid, &a);
+      (a, clock)
+    })
+    .collect();
+  visible_asteroids.sort_by(|(_, d0), (_, d1)| d1.partial_cmp(d0).unwrap());
+  visible_asteroids.reverse();
+  visible_asteroids
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -179,4 +198,191 @@ fn visibility(map: &[Asteroid]) -> Vec<(Asteroid, isize)> {
     .iter()
     .map(|(a, c)| (*a, c - 1))
     .collect::<Vec<(Asteroid, isize)>>()
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  #[test]
+  fn clock_0() {
+    assert_eq!(clock(&Asteroid(0, 0), &Asteroid(0, 1)), 0.5);
+  }
+  #[test]
+  fn clock_1() {
+    assert_eq!(clock(&Asteroid(2, 0), &Asteroid(14, 0)), 0.25);
+  }
+  #[test]
+  fn clock_3() {
+    assert_eq!(clock(&Asteroid(0, 0), &Asteroid(0, -1)), 0.0);
+  }
+  #[test]
+  fn clock_4() {
+    assert_eq!(clock(&Asteroid(1, 0), &Asteroid(-1, 0)), 0.750);
+  }
+  #[test]
+  fn clock_5a() {
+    assert_eq!(clock(&Asteroid(8, 3), &Asteroid(8, 1)), 0.0);
+  }
+  #[test]
+  fn clock_5b() {
+    assert_eq!(clock(&Asteroid(8, 3), &Asteroid(7, 0)), 0.9487918088252166);
+  }
+
+  #[test]
+  fn small_1() {
+    let map = Asteroid::from_lines(vec![
+      ".#....#####...#..",
+      "##...##.#####..##",
+      "##...#...#.#####.",
+      "..#.....#...###..",
+      "..#.#.....#....##",
+    ]);
+
+    let expected = Asteroid(8, 3);
+    let mut visible = visibility(&map);
+    let actual = visible.pop().map(|(a, _u)| a).unwrap();
+    assert_eq!(actual, expected);
+
+    let mut sorted = sort_clockwise_from(&actual, &map);
+    sorted.reverse();
+    let (a, _c) = sorted.pop().unwrap();
+    assert_eq!(a, Asteroid(8, 1));
+    let (a, _c) = sorted.pop().unwrap();
+    assert_eq!(a, Asteroid(9, 0));
+    let (a, _c) = sorted.pop().unwrap();
+    assert_eq!(a, Asteroid(9, 1));
+    let (a, _c) = sorted.pop().unwrap();
+    assert_eq!(a, Asteroid(10, 0));
+    let (a, _c) = sorted.pop().unwrap();
+    assert_eq!(a, Asteroid(9, 2));
+    let (a, _c) = sorted.pop().unwrap();
+    assert_eq!(a, Asteroid(11, 1));
+    let (a, _c) = sorted.pop().unwrap();
+    assert_eq!(a, Asteroid(12, 1));
+    let (a, _c) = sorted.pop().unwrap();
+    assert_eq!(a, Asteroid(11, 2));
+    let (a, _c) = sorted.pop().unwrap();
+    assert_eq!(a, Asteroid(15, 1));
+    let (a, _c) = sorted.pop().unwrap();
+    assert_eq!(a, Asteroid(12, 2));
+    let (a, _c) = sorted.pop().unwrap();
+    assert_eq!(a, Asteroid(13, 2));
+    let (a, _c) = sorted.pop().unwrap();
+    assert_eq!(a, Asteroid(14, 2));
+    let (a, _c) = sorted.pop().unwrap();
+    assert_eq!(a, Asteroid(15, 2));
+    let (a, _c) = sorted.pop().unwrap();
+    assert_eq!(a, Asteroid(12, 3));
+    let (a, _c) = sorted.pop().unwrap();
+    assert_eq!(a, Asteroid(16, 4));
+    let (a, _c) = sorted.pop().unwrap();
+    assert_eq!(a, Asteroid(15, 4));
+    let (a, _c) = sorted.pop().unwrap();
+    assert_eq!(a, Asteroid(10, 4));
+    let (a, _c) = sorted.pop().unwrap();
+    assert_eq!(a, Asteroid(4, 4));
+    let (a, _c) = sorted.pop().unwrap();
+    assert_eq!(a, Asteroid(2, 4));
+    let (a, _c) = sorted.pop().unwrap();
+    assert_eq!(a, Asteroid(2, 3));
+    let (a, _c) = sorted.pop().unwrap();
+    assert_eq!(a, Asteroid(0, 2));
+    let (a, _c) = sorted.pop().unwrap();
+    assert_eq!(a, Asteroid(1, 2));
+    let (a, _c) = sorted.pop().unwrap();
+    assert_eq!(a, Asteroid(0, 1));
+    let (a, _c) = sorted.pop().unwrap();
+    assert_eq!(a, Asteroid(1, 1));
+    let (a, _c) = sorted.pop().unwrap();
+    assert_eq!(a, Asteroid(5, 2));
+    let (a, _c) = sorted.pop().unwrap();
+    assert_eq!(a, Asteroid(1, 0));
+    let (a, _c) = sorted.pop().unwrap();
+    assert_eq!(a, Asteroid(5, 1));
+    let (a, _c) = sorted.pop().unwrap();
+    assert_eq!(a, Asteroid(6, 1));
+    let (a, _c) = sorted.pop().unwrap();
+    assert_eq!(a, Asteroid(6, 0));
+    let (a, _c) = sorted.pop().unwrap();
+    assert_eq!(a, Asteroid(7, 0));
+    assert!(sorted.is_empty());
+  }
+
+  #[test]
+  fn small_2() {
+    let map = Asteroid::from_lines(vec![
+      ".#....#####...#..",
+      "##...##.#####..##",
+      "##...#...#.#####.",
+      "..#.....#...###..",
+      "..#.#.....#....##",
+    ]);
+
+    let expected = Asteroid(8, 3);
+    let mut visible = visibility(&map);
+    let actual = visible.pop().map(|(a, _u)| a).unwrap();
+    assert_eq!(actual, expected);
+
+    let sorted = sort_clockwise_from(&actual, &map);
+
+    let nth = |p: usize| sorted.iter().nth(p - 1).map(|(a, _)| *a).unwrap();
+    assert_eq!(nth(1), Asteroid(8, 1));
+    assert_eq!(nth(30), Asteroid(7, 0));
+  }
+  #[test]
+  fn biggish_1() {
+    let map = Asteroid::from_lines(vec![
+      ".#..##.###...#######",
+      "##.############..##.",
+      ".#.######.########.#",
+      ".###.#######.####.#.",
+      "#####.##.#.##.###.##",
+      "..#####..#.#########",
+      "####################",
+      "#.####....###.#.#.##",
+      "##.#################",
+      "#####.##.###..####..",
+      "..######..##.#######",
+      "####.##.####...##..#",
+      ".#####..#.######.###",
+      "##...#.##########...",
+      "#.##########.#######",
+      ".####.#.###.###.#.##",
+      "....##.##.###..#####",
+      ".#.#.###########.###",
+      "#.#.#.#####.####.###",
+      "###.##.####.##.#..##",
+    ]);
+    let expected = Asteroid(11, 13);
+    let mut visible = visibility(&map);
+    let (actual, can_see) = visible.pop().unwrap();
+    assert_eq!(actual, expected);
+    assert_eq!(can_see, 210);
+
+    let sorted = sort_clockwise_from(&actual, &map);
+    let nth = |p: usize| sorted.iter().nth(p - 1).map(|(a, _)| *a).unwrap();
+    assert_eq!(nth(1), Asteroid(11, 12));
+    assert_eq!(nth(100), Asteroid(10, 16));
+    assert_eq!(nth(200), Asteroid(8, 2));
+  }
+  #[test]
+  fn big_1() {
+    let map = Asteroid::from_file("../day/10/input.map");
+
+    let mut visible = visibility(&map);
+    let actual = visible.pop().map(|(a, _u)| a).unwrap();
+    let sorted = sort_clockwise_from(&actual, &map);
+    let nth = |p: usize| sorted.iter().nth(p - 1).map(|(a, _)| *a).unwrap();
+    let asteroid = nth(200);
+    assert_eq!(asteroid, Asteroid(16, 23))
+    // 1329 not it [199]
+    // 1429 not it [200]?
+    //let asteroids = Asteroid::from_file("../day/10/input.map");
+
+    //visible_asteroids.reverse();
+    //  let count = 200;
+    //  let (asteroid, clock) = find_by_sweep(count, &asteroids);
+
+    // assert_eq!((asteroid, clock), (Asteroid(0, 0), 0.0));
+  }
 }
